@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>反應力：眼明手快</title>
+<style>
+  :root{
+    --bg: #1b2b3d;
+    --bg2: #2c4a5e;
+    --panel: #15222f;
+    --gold: #f4b942;
+    --coral: #ff6f61;
+    --mint: #7fd8be;
+    --cream: #f5e9da;
+    --danger: #ff4d5e;
+  }
+  *{ box-sizing:border-box; }
+  html,body{
+    margin:0; padding:0; height:100%;
+    font-family:'Nunito','Segoe UI',sans-serif;
+    background: radial-gradient(ellipse at top, var(--bg2) 0%, var(--bg) 65%);
+    color: var(--cream);
+    overflow:hidden;
+    -webkit-user-select:none; user-select:none;
+  }
+  #wrap{
+    display:flex; flex-direction:column; align-items:center;
+    height:100vh; padding:14px 0 0 0;
+  }
+  h1{
+    font-family:'Fredoka','Nunito',sans-serif;
+    font-weight:700;
+    font-size: clamp(20px, 5vw, 28px);
+    color: var(--gold);
+    margin: 0 0 8px 0;
+    text-shadow: 0 2px 0 rgba(0,0,0,0.25);
+  }
+  #hud{
+    display:flex; gap:14px; margin-bottom:8px; align-items:center;
+  }
+  .box{
+    background: rgba(244,185,66,0.12);
+    border:1px solid rgba(244,185,66,0.3);
+    border-radius:10px;
+    padding:5px 14px;
+    text-align:center;
+    min-width:60px;
+  }
+  .box .lab{ font-size:10px; color: var(--mint); font-weight:700; }
+  .box .val{ font-size:17px; font-weight:800; }
+  #timerBarWrap{
+    width:min(92vw, 420px);
+    height:10px;
+    background: rgba(255,255,255,0.08);
+    border-radius:6px;
+    overflow:hidden;
+    margin-bottom:12px;
+  }
+  #timerBar{
+    height:100%;
+    width:100%;
+    background: linear-gradient(90deg, var(--mint), var(--gold));
+    transition: width .05s linear;
+  }
+  #panel{
+    position:relative;
+    width:min(92vw, 420px);
+    height:min(60vh, 460px);
+    background: var(--panel);
+    border-radius:18px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.45), inset 0 0 0 2px rgba(244,185,66,0.2);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding: 16px;
+  }
+  #instruction{
+    font-family:'Fredoka',sans-serif;
+    font-size: clamp(18px, 5vw, 24px);
+    font-weight:700;
+    margin-bottom: 18px;
+    text-align:center;
+    color: var(--cream);
+    min-height:32px;
+  }
+  #targetGrid{
+    display:grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    width:100%;
+  }
+  .tbtn{
+    aspect-ratio:1;
+    border-radius: 14px;
+    border: none;
+    cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Fredoka',sans-serif;
+    font-weight:800;
+    font-size: clamp(20px, 6vw, 30px);
+    color: rgba(0,0,0,0.55);
+    transition: transform .06s ease;
+  }
+  .tbtn:active{ transform: scale(0.92); }
+  #feedback{
+    position:absolute;
+    top: 8px; left:0; right:0;
+    text-align:center;
+    font-weight:800;
+    font-size:15px;
+    opacity:0;
+    transition: opacity .12s;
+    pointer-events:none;
+  }
+  #feedback.show{ opacity:1; }
+  .overlay{
+    position:absolute; inset:0;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:12px;
+    background: rgba(10,15,25,0.9);
+    border-radius:18px;
+    text-align:center;
+    padding:20px;
+  }
+  .overlay h2{ font-family:'Fredoka',sans-serif; color: var(--gold); margin:0; font-size:22px; }
+  .overlay p{ margin:0; color: var(--cream); opacity:0.85; font-size:13px; max-width:300px; line-height:1.6; }
+  button.action{
+    font-family:'Fredoka','Nunito',sans-serif;
+    font-weight:700;
+    border:none; cursor:pointer;
+    padding: 11px 26px;
+    border-radius: 12px;
+    font-size:15px;
+    background: var(--gold);
+    color:#3a2500;
+  }
+  .hidden{ display:none !important; }
+  #hint{ margin-top:12px; font-size:12px; color: var(--cream); opacity:0.7; text-align:center; max-width:360px; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <h1>⚡ 眼明手快</h1>
+  <div id="hud">
+    <div class="box"><div class="lab">分數</div><div class="val" id="scoreVal">0</div></div>
+    <div class="box"><div class="lab">連擊</div><div class="val" id="comboVal">0</div></div>
+    <div class="box"><div class="lab">生命</div><div class="val" id="livesVal">❤️❤️❤️</div></div>
+  </div>
+  <div id="timerBarWrap"><div id="timerBar"></div></div>
+
+  <div id="panel">
+    <div id="feedback"></div>
+    <div id="instruction">準備好了嗎？</div>
+    <div id="targetGrid"></div>
+
+    <div class="overlay" id="startOverlay">
+      <h2>眼明手快</h2>
+      <p>畫面會出現指令，例如「點擊紅色」或「點擊比 5 大的數字」，在時間內點對按鈕就加分，點錯或超時會扣生命。速度會越來越快！</p>
+      <button class="action" id="startBtn">開始遊戲</button>
+    </div>
+
+    <div class="overlay hidden" id="endOverlay">
+      <h2 id="endTitle">遊戲結束</h2>
+      <p id="endDetail">分數：0</p>
+      <button class="action" id="retryBtn">再玩一次</button>
+    </div>
+  </div>
+
+  <div id="hint">顏色題看指令找對應顏色；數字題看指令的條件（比大/比小/是奇數等）找對應數字。</div>
+</div>
+
+<script>
+(function(){
+  const scoreVal = document.getElementById('scoreVal');
+  const comboVal = document.getElementById('comboVal');
+  const livesVal = document.getElementById('livesVal');
+  const timerBar = document.getElementById('timerBar');
+  const instruction = document.getElementById('instruction');
+  const targetGrid = document.getElementById('targetGrid');
+  const feedback = document.getElementById('feedback');
+  const startOverlay = document.getElementById('startOverlay');
+  const endOverlay = document.getElementById('endOverlay');
+  const endTitle = document.getElementById('endTitle');
+  const endDetail = document.getElementById('endDetail');
+  const startBtn = document.getElementById('startBtn');
+  const retryBtn = document.getElementById('retryBtn');
+
+  const COLORS = [
+    {name:'紅色', hex:'#ff4d5e'},
+    {name:'黃色', hex:'#f4d942'},
+    {name:'綠色', hex:'#7fd8be'},
+    {name:'藍色', hex:'#5b8def'},
+    {name:'紫色', hex:'#b18cf0'},
+    {name:'橘色', hex:'#f59563'},
+  ];
+
+  let score=0, combo=0, lives=3, round=0, running=false;
+  let roundTimeMs = 2600;
+  let timerRAF = null, roundStart = 0, roundDeadline = 0;
+  let currentAnswerCheck = null;
+  let ended = false;
+
+  function setLivesDisplay(){
+    livesVal.textContent = '❤️'.repeat(Math.max(lives,0)) + '🖤'.repeat(Math.max(3-lives,0));
+  }
+
+  function rand(n){ return Math.floor(Math.random()*n); }
+  function shuffle(arr){
+    const a = arr.slice();
+    for(let i=a.length-1;i>0;i--){
+      const j = rand(i+1);
+      [a[i],a[j]]=[a[j],a[i]];
+    }
+    return a;
+  }
+
+  function buildColorRound(){
+    const count = 6;
+    const chosen = shuffle(COLORS).slice(0, count);
+    const target = chosen[rand(count)];
+    instruction.textContent = '點擊：' + target.name;
+    targetGrid.innerHTML = '';
+    chosen.forEach(c=>{
+      const b = document.createElement('button');
+      b.className = 'tbtn';
+      b.style.background = c.hex;
+      b.onclick = ()=> currentAnswerCheck && currentAnswerCheck(c.name === target.name);
+      targetGrid.appendChild(b);
+    });
+  }
+
+  function buildNumberRound(){
+    const count = 6;
+    const nums = new Set();
+    while(nums.size < count) nums.add(1 + rand(20));
+    const numArr = shuffle(Array.from(nums));
+
+    const modes = [
+      { desc:(n)=> `點擊比 ${n} 大的數字`, test:(v,n)=> v>n, pick:()=>{
+          const n = 3 + rand(14);
+          return {n, valid: numArr.filter(v=>v>n)};
+        }},
+      { desc:(n)=> `點擊比 ${n} 小的數字`, test:(v,n)=> v<n, pick:()=>{
+          const n = 5 + rand(14);
+          return {n, valid: numArr.filter(v=>v<n)};
+        }},
+      { desc:()=> `點擊奇數`, test:(v)=> v%2===1, pick:()=>({ n:null, valid: numArr.filter(v=>v%2===1) })},
+      { desc:()=> `點擊偶數`, test:(v)=> v%2===0, pick:()=>({ n:null, valid: numArr.filter(v=>v%2===0) })},
+    ];
+
+    let chosenMode, info, tries=0;
+    do{
+      chosenMode = modes[rand(modes.length)];
+      info = chosenMode.pick();
+      tries++;
+    } while((info.valid.length===0 || info.valid.length===numArr.length) && tries<10);
+
+    instruction.textContent = chosenMode.desc(info.n);
+    targetGrid.innerHTML = '';
+    const palette = ['#f4b942','#7fd8be','#5b8def','#ff6f61','#b18cf0','#f59563'];
+    numArr.forEach((v,i)=>{
+      const b = document.createElement('button');
+      b.className = 'tbtn';
+      b.style.background = palette[i % palette.length];
+      b.textContent = v;
+      b.onclick = ()=> currentAnswerCheck && currentAnswerCheck(chosenMode.test(v, info.n));
+      targetGrid.appendChild(b);
+    });
+  }
+
+  function nextRound(){
+    if(!running) return;
+    round++;
+    roundTimeMs = Math.max(1000, 2600 - round*60);
+    const isColorRound = Math.random() < 0.5;
+    if(isColorRound) buildColorRound(); else buildNumberRound();
+
+    currentAnswerCheck = (correct)=>{
+      currentAnswerCheck = null;
+      cancelAnimationFrame(timerRAF);
+      if(correct){
+        combo++;
+        score += 10 + Math.min(combo,10)*2;
+        showFeedback('讚！ +' + (10+Math.min(combo,10)*2), 'var(--mint)');
+      } else {
+        combo = 0;
+        lives--;
+        setLivesDisplay();
+        showFeedback('不對！', 'var(--danger)');
+      }
+      scoreVal.textContent = score;
+      comboVal.textContent = combo;
+      if(lives<=0){ setTimeout(()=>endGame(), 350); return; }
+      setTimeout(nextRound, 420);
+    };
+
+    roundStart = performance.now();
+    roundDeadline = roundStart + roundTimeMs;
+    tickTimer();
+  }
+
+  function tickTimer(){
+    const now = performance.now();
+    const remain = Math.max(0, roundDeadline - now);
+    timerBar.style.width = (remain/roundTimeMs*100) + '%';
+    if(remain<=0){
+      if(currentAnswerCheck){
+        currentAnswerCheck(false);
+      }
+      return;
+    }
+    timerRAF = requestAnimationFrame(tickTimer);
+  }
+
+  function showFeedback(text, color){
+    feedback.textContent = text;
+    feedback.style.color = color;
+    feedback.classList.add('show');
+    setTimeout(()=> feedback.classList.remove('show'), 350);
+  }
+
+  function startGame(){
+    score=0; combo=0; lives=3; round=0; ended=false;
+    scoreVal.textContent='0'; comboVal.textContent='0';
+    setLivesDisplay();
+    startOverlay.classList.add('hidden');
+    endOverlay.classList.add('hidden');
+    running = true;
+    nextRound();
+  }
+
+  function endGame(){
+    running = false;
+    cancelAnimationFrame(timerRAF);
+    endTitle.textContent = '遊戲結束！';
+    endDetail.textContent = '最終分數：' + score + '（撐了 ' + (round-1) + ' 輪）';
+    endOverlay.classList.remove('hidden');
+  }
+
+  startBtn.onclick = startGame;
+  retryBtn.onclick = startGame;
+})();
+</script>
+</body>
+</html>
