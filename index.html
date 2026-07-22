@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>驚喜提袋 Surprise Catch</title>
+<style>
+  :root{
+    --bg-deep: #2b1b3d;
+    --bg-deep2: #4a2c5e;
+    --gold: #f4b942;
+    --coral: #ff6f61;
+    --mint: #7fd8be;
+    --cream: #f5e9da;
+    --danger: #ff4d5e;
+  }
+  *{ box-sizing:border-box; }
+  html,body{
+    margin:0; padding:0; height:100%;
+    font-family:'Nunito', 'Segoe UI', sans-serif;
+    background: radial-gradient(ellipse at top, var(--bg-deep2) 0%, var(--bg-deep) 65%);
+    color: var(--cream);
+    overflow:hidden;
+    -webkit-user-select:none; user-select:none;
+  }
+  #wrap{
+    position:relative;
+    width:100%; height:100vh;
+    display:flex; flex-direction:column; align-items:center;
+    padding:14px 0 0 0;
+  }
+  h1{
+    font-family: 'Fredoka', 'Nunito', sans-serif;
+    font-weight:700;
+    font-size: clamp(20px, 4vw, 30px);
+    letter-spacing: 0.5px;
+    margin: 2px 0 8px 0;
+    color: var(--gold);
+    text-shadow: 0 2px 0 rgba(0,0,0,0.25);
+  }
+  #hud{
+    display:flex; gap:22px; align-items:center;
+    font-size:16px; font-weight:700;
+    margin-bottom:6px;
+  }
+  #hud span.label{ color: var(--mint); font-weight:600; margin-right:4px; font-size:13px;}
+  #comboTag{
+    color: var(--coral);
+    opacity:0;
+    transition: opacity .15s;
+    font-size:14px;
+  }
+  #canvasHolder{
+    position:relative;
+    width:min(94vw, 480px);
+    height:min(68vh, 640px);
+    border-radius: 18px;
+    overflow:hidden;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.45), inset 0 0 0 2px rgba(244,185,66,0.25);
+    background: linear-gradient(180deg, #3a2352 0%, #241533 100%);
+  }
+  canvas{ display:block; width:100%; height:100%; touch-action:none; }
+
+  .overlay{
+    position:absolute; inset:0;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:14px;
+    background: rgba(20,10,32,0.82);
+    text-align:center;
+    padding: 20px;
+  }
+  .overlay h2{
+    font-family:'Fredoka', sans-serif;
+    color: var(--gold); margin:0; font-size:24px;
+  }
+  .overlay p{ margin:0; color: var(--cream); opacity:0.85; font-size:14px; line-height:1.6; max-width:320px; }
+  .modeBtns{ display:flex; gap:10px; margin-top:6px; }
+  button{
+    font-family:'Fredoka','Nunito',sans-serif;
+    font-weight:600;
+    border:none; cursor:pointer;
+    padding: 10px 20px;
+    border-radius: 12px;
+    font-size:15px;
+    background: var(--mint);
+    color:#173028;
+    transition: transform .1s ease;
+  }
+  button:hover{ transform: translateY(-2px); }
+  button.alt{ background: var(--coral); color:#3a0f0b; }
+  button.primary{ background: var(--gold); color:#3a2500; padding:12px 30px; font-size:17px; }
+  #modePicked{ font-size:13px; color: var(--gold); min-height:18px; }
+  .hidden{ display:none !important; }
+  #legend{
+    display:flex; gap:14px; margin-top:10px; font-size:12px; color: var(--cream); opacity:0.75; flex-wrap:wrap; justify-content:center; max-width:420px;
+  }
+  #legend div{ display:flex; align-items:center; gap:5px; }
+  .dot{ width:10px; height:10px; border-radius:3px; display:inline-block; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <h1>🎁 驚喜提袋</h1>
+  <div id="hud">
+    <div><span class="label">分數</span><span id="scoreVal">0</span></div>
+    <div id="timeBox"><span class="label">時間</span><span id="timeVal">60</span></div>
+    <div id="livesBox" class="hidden"><span class="label">生命</span><span id="livesVal">❤️❤️❤️</span></div>
+    <div id="comboTag">連擊 x<span id="comboVal">0</span>!</div>
+  </div>
+
+  <div id="canvasHolder">
+    <canvas id="game"></canvas>
+
+    <div class="overlay" id="startScreen">
+      <h2>選擇模式</h2>
+      <p>移動滑鼠或手指來控制下方的提袋，接住掉下來的驚喜箱子。金色箱子加分更多、閃電是雙倍分數加成、驚嘆號炸彈要閃開，星星是超稀有大獎！</p>
+      <div class="modeBtns">
+        <button id="sprintBtn">⏱ 衝刺 60 秒</button>
+        <button id="endlessBtn" class="alt">♾ 無盡模式（3 條命）</button>
+      </div>
+      <div id="modePicked"></div>
+      <button id="playBtn" class="primary hidden">開始遊戲</button>
+    </div>
+
+    <div class="overlay hidden" id="endScreen">
+      <h2 id="endTitle">遊戲結束！</h2>
+      <p id="endDetail">最終分數：0</p>
+      <button id="againBtn" class="primary">再玩一次</button>
+    </div>
+  </div>
+
+  <div id="legend">
+    <div><span class="dot" style="background:#e8a13a"></span>普通箱 +10</div>
+    <div><span class="dot" style="background:#f4d942"></span>金箱 +30</div>
+    <div><span class="dot" style="background:#7fd8be"></span>雙倍加成</div>
+    <div><span class="dot" style="background:#ff4d5e"></span>炸彈！閃開</div>
+    <div><span class="dot" style="background:#ffffff"></span>星星大獎 +60</div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const holder = document.getElementById('canvasHolder');
+  let W, H;
+  function resize(){
+    const rect = holder.getBoundingClientRect();
+    W = canvas.width = rect.width;
+    H = canvas.height = rect.height;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  const scoreVal = document.getElementById('scoreVal');
+  const timeVal = document.getElementById('timeVal');
+  const livesVal = document.getElementById('livesVal');
+  const timeBox = document.getElementById('timeBox');
+  const livesBox = document.getElementById('livesBox');
+  const comboTag = document.getElementById('comboTag');
+  const comboVal = document.getElementById('comboVal');
+  const startScreen = document.getElementById('startScreen');
+  const endScreen = document.getElementById('endScreen');
+  const endTitle = document.getElementById('endTitle');
+  const endDetail = document.getElementById('endDetail');
+  const sprintBtn = document.getElementById('sprintBtn');
+  const endlessBtn = document.getElementById('endlessBtn');
+  const playBtn = document.getElementById('playBtn');
+  const againBtn = document.getElementById('againBtn');
+  const modePicked = document.getElementById('modePicked');
+
+  let mode = null; // 'sprint' | 'endless'
+  sprintBtn.onclick = ()=>{ mode='sprint'; modePicked.textContent='已選擇：衝刺 60 秒'; playBtn.classList.remove('hidden'); };
+  endlessBtn.onclick = ()=>{ mode='endless'; modePicked.textContent='已選擇：無盡模式'; playBtn.classList.remove('hidden'); };
+
+  let basketX = 0;
+  const basketW = 70, basketH = 26;
+  function setBasketFromClientX(clientX){
+    const rect = canvas.getBoundingClientRect();
+    let x = clientX - rect.left - basketW/2;
+    x = Math.max(0, Math.min(W - basketW, x));
+    basketX = x;
+  }
+  canvas.addEventListener('mousemove', e=> setBasketFromClientX(e.clientX));
+  canvas.addEventListener('touchmove', e=>{
+    e.preventDefault();
+    setBasketFromClientX(e.touches[0].clientX);
+  }, {passive:false});
+
+  let items = [];
+  let score = 0, lives = 3, timeLeft = 60;
+  let combo = 0, multiplier = 1, multiplierTimer = 0;
+  let spawnTimer = 0, spawnInterval = 900;
+  let elapsed = 0;
+  let running = false;
+  let lastTs = null;
+  let particles = [];
+  let shake = 0;
+
+  const TYPES = [
+    {key:'normal', color:'#e8a13a', weight:52, points:10},
+    {key:'gold',   color:'#f4d942', weight:18, points:30},
+    {key:'boost',  color:'#7fd8be', weight:12, points:5},
+    {key:'bomb',   color:'#ff4d5e', weight:14, points:0},
+    {key:'star',   color:'#ffffff', weight:4,  points:60},
+  ];
+  function pickType(){
+    const total = TYPES.reduce((s,t)=>s+t.weight,0);
+    let r = Math.random()*total;
+    for(const t of TYPES){ if(r<t.weight) return t; r-=t.weight; }
+    return TYPES[0];
+  }
+
+  function spawnItem(){
+    const t = pickType();
+    const size = t.key==='star' ? 26 : 30;
+    items.push({
+      type:t, x: Math.random()*(W-size), y:-size, size,
+      vy: 2.0 + Math.random()*1.4 + elapsed/40000*2.5,
+      rot: 0, rotSpeed: (Math.random()-0.5)*0.1
+    });
+  }
+
+  function resetGame(){
+    items = []; particles = [];
+    score = 0; combo = 0; multiplier = 1; multiplierTimer = 0;
+    lives = 3; timeLeft = 60;
+    spawnTimer = 0; spawnInterval = 900; elapsed = 0;
+    basketX = W/2 - basketW/2;
+    scoreVal.textContent = '0';
+    comboTag.style.opacity = 0;
+    if(mode==='sprint'){
+      timeBox.classList.remove('hidden');
+      livesBox.classList.add('hidden');
+      timeVal.textContent = '60';
+    } else {
+      timeBox.classList.add('hidden');
+      livesBox.classList.remove('hidden');
+      livesVal.textContent = '❤️❤️❤️';
+    }
+  }
+
+  playBtn.onclick = ()=>{
+    startScreen.classList.add('hidden');
+    resetGame();
+    running = true;
+    lastTs = null;
+    requestAnimationFrame(loop);
+  };
+
+  againBtn.onclick = ()=>{
+    endScreen.classList.add('hidden');
+    startScreen.classList.remove('hidden');
+    playBtn.classList.add('hidden');
+    modePicked.textContent = '';
+    mode = null;
+  };
+
+  function addParticles(x,y,color,count){
+    for(let i=0;i<count;i++){
+      particles.push({
+        x,y, vx:(Math.random()-0.5)*4, vy:(Math.random()-1.5)*4,
+        life:1, color
+      });
+    }
+  }
+
+  function endGame(win){
+    running = false;
+    endScreen.classList.remove('hidden');
+    if(mode==='sprint'){
+      endTitle.textContent = '時間到！';
+    } else {
+      endTitle.textContent = '喔不，用完生命了！';
+    }
+    endDetail.textContent = '最終分數：' + score + (combo>=8 ? '（最高連擊 x'+combo+' 太強了！）' : '');
+  }
+
+  function loop(ts){
+    if(!running) return;
+    if(lastTs==null) lastTs = ts;
+    const dt = Math.min(ts-lastTs, 40);
+    lastTs = ts;
+    elapsed += dt;
+
+    // timers
+    if(mode==='sprint'){
+      timeLeft -= dt/1000;
+      if(timeLeft<=0){ timeLeft=0; timeVal.textContent='0'; endGame(); return; }
+      timeVal.textContent = Math.ceil(timeLeft);
+    }
+    if(multiplierTimer>0){
+      multiplierTimer -= dt;
+      if(multiplierTimer<=0){ multiplier = 1; }
+    }
+
+    // difficulty ramp
+    spawnInterval = Math.max(360, 900 - elapsed/1000*10);
+    spawnTimer += dt;
+    if(spawnTimer > spawnInterval){
+      spawnTimer = 0;
+      spawnItem();
+    }
+
+    // update items
+    for(let i=items.length-1;i>=0;i--){
+      const it = items[i];
+      it.y += it.vy * (dt/16);
+      it.rot += it.rotSpeed;
+
+      // collision with basket
+      const basketY = H - 42;
+      if(it.y + it.size/2 > basketY && it.y - it.size/2 < basketY + basketH &&
+         it.x + it.size > basketX && it.x < basketX + basketW){
+        handleCatch(it);
+        items.splice(i,1);
+        continue;
+      }
+      if(it.y - it.size > H){
+        if(it.type.key !== 'bomb'){
+          combo = 0;
+          comboTag.style.opacity = 0;
+        }
+        items.splice(i,1);
+      }
+    }
+
+    // particles
+    for(let i=particles.length-1;i>=0;i--){
+      const p = particles[i];
+      p.x += p.vx; p.y += p.vy; p.vy += 0.15; p.life -= 0.025;
+      if(p.life<=0) particles.splice(i,1);
+    }
+    if(shake>0) shake -= dt*0.05;
+
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  function handleCatch(it){
+    const key = it.type.key;
+    if(key==='bomb'){
+      shake = 8;
+      addParticles(it.x+it.size/2, it.y, '#ff4d5e', 14);
+      combo = 0; comboTag.style.opacity = 0;
+      if(mode==='endless'){
+        lives -= 1;
+        livesVal.textContent = '❤️'.repeat(Math.max(lives,0)) + '🖤'.repeat(3-Math.max(lives,0));
+        if(lives<=0){ endGame(); return; }
+      } else {
+        score = Math.max(0, score - 15);
+        scoreVal.textContent = score;
+      }
+      return;
+    }
+    combo += 1;
+    comboVal.textContent = combo;
+    comboTag.style.opacity = combo>=2 ? 1 : 0;
+
+    let pts = it.type.points;
+    if(key==='boost'){
+      multiplier = 2; multiplierTimer = 5000;
+      addParticles(it.x+it.size/2, it.y, '#7fd8be', 10);
+    } else if(key==='star'){
+      addParticles(it.x+it.size/2, it.y, '#ffffff', 26);
+    } else {
+      addParticles(it.x+it.size/2, it.y, it.type.color, 8);
+    }
+    // combo bonus
+    const comboBonus = Math.min(combo, 10) * 1;
+    score += Math.round((pts + comboBonus) * multiplier);
+    scoreVal.textContent = score;
+  }
+
+  function roundRect(x,y,w,h,r){
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r);
+    ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);
+    ctx.arcTo(x,y,x+w,y,r);
+    ctx.closePath();
+  }
+
+  function drawStar(cx,cy,r){
+    ctx.beginPath();
+    for(let i=0;i<10;i++){
+      const ang = Math.PI/5 * i - Math.PI/2;
+      const rad = i%2===0 ? r : r*0.45;
+      const x = cx + Math.cos(ang)*rad;
+      const y = cy + Math.sin(ang)*rad;
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.closePath();
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    ctx.save();
+    if(shake>0){
+      ctx.translate((Math.random()-0.5)*shake, (Math.random()-0.5)*shake);
+    }
+
+    // ground line
+    const basketY = H - 42;
+    ctx.strokeStyle = 'rgba(244,185,66,0.15)';
+    ctx.beginPath(); ctx.moveTo(0, basketY+basketH); ctx.lineTo(W, basketY+basketH); ctx.stroke();
+
+    // items
+    items.forEach(it=>{
+      ctx.save();
+      ctx.translate(it.x+it.size/2, it.y);
+      ctx.rotate(it.rot);
+      if(it.type.key==='star'){
+        ctx.fillStyle = '#ffffff';
+        ctx.shadowColor = '#fff8d6'; ctx.shadowBlur = 12;
+        drawStar(0,0,it.size/2);
+        ctx.fill();
+      } else {
+        ctx.fillStyle = it.type.color;
+        roundRect(-it.size/2, -it.size/2, it.size, it.size, 6);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.font = 'bold 14px sans-serif';
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        const label = it.type.key==='bomb' ? '!' : it.type.key==='boost' ? '⚡' : it.type.key==='gold' ? '★' : '';
+        ctx.fillText(label, 0, 1);
+      }
+      ctx.restore();
+    });
+
+    // basket
+    ctx.fillStyle = multiplierTimer>0 ? '#7fd8be' : '#f4b942';
+    roundRect(basketX, basketY, basketW, basketH, 10);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.font = '12px sans-serif'; ctx.textAlign='center';
+    ctx.fillText('🧺', basketX+basketW/2, basketY+18);
+
+    // particles
+    particles.forEach(p=>{
+      ctx.globalAlpha = Math.max(p.life,0);
+      ctx.fillStyle = p.color;
+      ctx.beginPath(); ctx.arc(p.x,p.y,3,0,Math.PI*2); ctx.fill();
+      ctx.globalAlpha = 1;
+    });
+
+    ctx.restore();
+  }
+
+  // initial静止畫面
+  resize();
+  basketX = W/2 - basketW/2;
+  draw();
+})();
+</script>
+</body>
+</html>
