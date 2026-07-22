@@ -154,7 +154,8 @@
   const undoBtn = document.getElementById('undoBtn');
   const retryBtn = document.getElementById('retryBtn');
 
-  let board, score, best, prevState, wonAnnounced;
+  let board, score, best, history, wonAnnounced;
+  const MAX_HISTORY = 20;
 
   const COLORS = {
     2:'#eee4da', 4:'#ede0c8', 8:'#f2b179', 16:'#f59563',
@@ -206,7 +207,7 @@
   function startGame(){
     board = emptyBoard();
     score = 0;
-    prevState = null;
+    history = [];
     wonAnnounced = false;
     addRandomTile();
     addRandomTile();
@@ -295,7 +296,8 @@
     for(let i=0;i<backRotations;i++) result = rotateBoardCW(result);
 
     if(!boardsEqual(result, board)){
-      prevState = { board: cloneBoard(board), score };
+      history.push({ board: cloneBoard(board), score });
+      if(history.length > MAX_HISTORY) history.shift();
       board = result;
       score += totalGain;
       if(score > bestMem) bestMem = score;
@@ -368,10 +370,10 @@
 
   newGameBtn.onclick = startGame;
   undoBtn.onclick = ()=>{
-    if(prevState){
-      board = prevState.board;
-      score = prevState.score;
-      prevState = null;
+    if(history.length > 0){
+      const last = history.pop();
+      board = last.board;
+      score = last.score;
       endOverlay.classList.add('hidden');
       render(false);
     }
