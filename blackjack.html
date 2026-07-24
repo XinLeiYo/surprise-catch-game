@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>21點 Blackjack</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+  :root{
+    --felt: #0f2a1e;
+    --felt2: #1b3a2b;
+    --panel: #0c2118;
+    --gold: #f4b942;
+    --coral: #ff6f61;
+    --mint: #7fd8be;
+    --cream: #f5e9da;
+    --danger: #ff4d5e;
+    --cardred: #d1394a;
+    --cardblack: #23252b;
+  }
+  *{ box-sizing:border-box; }
+  html,body{
+    margin:0; padding:0; min-height:100%;
+    font-family:'Nunito','Segoe UI',sans-serif;
+    background: radial-gradient(ellipse at top, var(--felt2) 0%, var(--felt) 70%);
+    color: var(--cream);
+    -webkit-user-select:none; user-select:none;
+  }
+  #wrap{
+    max-width: 520px;
+    margin: 0 auto;
+    padding: 14px 12px 30px 12px;
+    display:flex; flex-direction:column; align-items:center;
+  }
+  h1{
+    font-family:'Fredoka','Nunito',sans-serif;
+    font-weight:700;
+    font-size: clamp(22px, 6vw, 30px);
+    color: var(--gold);
+    margin: 4px 0 10px 0;
+    text-shadow: 0 2px 0 rgba(0,0,0,0.3);
+  }
+  #topBar{
+    width:100%;
+    display:flex; justify-content:space-between; align-items:center;
+    margin-bottom: 10px;
+    gap:8px; flex-wrap:wrap;
+  }
+  .stat{
+    background: rgba(244,185,66,0.1);
+    border: 1px solid rgba(244,185,66,0.3);
+    border-radius: 10px;
+    padding: 6px 14px;
+    text-align:center;
+  }
+  .stat .lab{ font-size:11px; color: var(--mint); font-weight:700; }
+  .stat .val{ font-size:18px; font-weight:800; color: var(--gold); }
+
+  #table{
+    width:100%;
+    background: var(--panel);
+    border-radius: 20px;
+    box-shadow: 0 14px 40px rgba(0,0,0,0.5), inset 0 0 0 2px rgba(244,185,66,0.2);
+    padding: 16px 12px;
+    position:relative;
+    min-height: 420px;
+  }
+  .zone-label{
+    font-size:12px; font-weight:700; color: var(--mint); margin-bottom:6px; text-align:center;
+  }
+  #dealerZone{ margin-bottom: 18px; }
+  .cardsRow{
+    display:flex; gap:6px; justify-content:center; flex-wrap:wrap; min-height: 92px; align-items:center;
+  }
+  .card{
+    width:56px; height:80px;
+    background: #fdf8ee;
+    border-radius: 8px;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.35);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    font-family:'Fredoka',sans-serif;
+    font-weight:700;
+    font-size:18px;
+    position:relative;
+    animation: dealCard .2s ease;
+  }
+  @keyframes dealCard{
+    0%{ transform: translateY(-20px) scale(0.85); opacity:0; }
+    100%{ transform: translateY(0) scale(1); opacity:1; }
+  }
+  .card.red{ color: var(--cardred); }
+  .card.black{ color: var(--cardblack); }
+  .card .suit{ font-size:22px; margin-top:2px; }
+  .card.back{
+    background: repeating-linear-gradient(45deg, #3a2352, #3a2352 6px, #4a2c5e 6px, #4a2c5e 12px);
+    border: 2px solid rgba(244,185,66,0.4);
+  }
+  .handValue{
+    text-align:center; font-size:13px; color: var(--cream); opacity:0.85; margin-top:4px; font-weight:700;
+  }
+  #playerZone{
+    display:flex; flex-direction:column; gap:14px;
+  }
+  .handBlock{
+    border-radius: 14px;
+    padding: 8px;
+    transition: box-shadow .15s;
+  }
+  .handBlock.active{
+    box-shadow: 0 0 0 2px var(--gold), 0 0 16px rgba(244,185,66,0.35);
+  }
+  .handMeta{
+    display:flex; justify-content:center; gap:10px; font-size:12px; margin-top:4px; color: var(--cream); opacity:0.8;
+  }
+  .resultTag{
+    font-weight:800; font-size:13px; margin-top:2px; text-align:center;
+  }
+  .resultTag.win{ color: var(--mint); }
+  .resultTag.lose{ color: var(--danger); }
+  .resultTag.push{ color: var(--gold); }
+
+  #message{
+    text-align:center; min-height:22px; font-weight:700; margin: 10px 0 4px 0; color: var(--gold);
+  }
+
+  #bettingArea{
+    display:flex; flex-direction:column; align-items:center; gap:10px; margin-top:8px;
+  }
+  #chips{
+    display:flex; gap:8px; flex-wrap:wrap; justify-content:center;
+  }
+  .chip{
+    width:56px; height:56px; border-radius:50%;
+    border: 3px dashed rgba(255,255,255,0.5);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Fredoka',sans-serif; font-weight:800; font-size:14px;
+    cursor:pointer; color:#1a1a1a;
+  }
+  .chip:active{ transform: scale(0.94); }
+  #betDisplay{ font-size:16px; font-weight:800; color: var(--gold); }
+
+  .btnRow{ display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-top:8px; }
+  button.action{
+    font-family:'Fredoka','Nunito',sans-serif;
+    font-weight:700; border:none; cursor:pointer;
+    padding: 10px 18px; border-radius: 12px; font-size:14px;
+    background: var(--mint); color:#173028;
+  }
+  button.action.gold{ background: var(--gold); color:#3a2500; }
+  button.action.coral{ background: var(--coral); color:#3a0f0b; }
+  button.action:disabled{ opacity:0.35; cursor:not-allowed; }
+
+  .overlay{
+    position:absolute; inset:0;
+    background: rgba(8,15,10,0.92);
+    border-radius:20px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:12px; text-align:center; padding:20px;
+  }
+  .overlay h2{ font-family:'Fredoka',sans-serif; color: var(--gold); margin:0; font-size:22px; }
+  .overlay p{ margin:0; font-size:13px; color: var(--cream); opacity:0.85; max-width:300px; line-height:1.6;}
+  .hidden{ display:none !important; }
+  #hint{ margin-top:14px; font-size:12px; color:var(--cream); opacity:0.65; text-align:center; max-width:420px; }
+  .lbRow{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:8px 10px; border-radius:8px; margin-bottom:6px;
+    background: rgba(244,185,66,0.08);
+    font-size:14px;
+  }
+  .lbRow.me{ background: rgba(244,185,66,0.28); font-weight:800; }
+  .lbRank{ color: var(--gold); font-weight:800; width:28px; }
+  .lbName{ flex:1; text-align:left; padding-left:6px; }
+  .lbScore{ color: var(--mint); font-weight:800; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <h1>🂡 21 點</h1>
+  <div id="topBar">
+    <div class="stat"><div class="lab">籌碼</div><div class="val" id="balanceVal">$0</div></div>
+    <div class="stat"><div class="lab">下注</div><div class="val" id="betDisplayTop">$0</div></div>
+    <div class="stat" id="leaderboardBtn" style="cursor:pointer;"><div class="lab">🏆</div><div class="val" style="font-size:13px;">排行榜</div></div>
+  </div>
+  <div id="nicknameNote" style="font-size:11px; color:var(--mint); opacity:0.8; margin:-4px 0 8px 0;"></div>
+
+  <div id="table">
+    <div id="dealerZone">
+      <div class="zone-label">莊家</div>
+      <div class="cardsRow" id="dealerCards"></div>
+      <div class="handValue" id="dealerValue">&nbsp;</div>
+    </div>
+
+    <div id="playerZone"></div>
+
+    <div id="message">下注後點擊「發牌」開始</div>
+
+    <div id="bettingArea">
+      <div id="betDisplay">下注金額：$0</div>
+      <div id="chips">
+        <div class="chip" style="background:#f4d942" data-v="10">$10</div>
+        <div class="chip" style="background:#7fd8be" data-v="25">$25</div>
+        <div class="chip" style="background:#ff6f61" data-v="50">$50</div>
+        <div class="chip" style="background:#5b8def" data-v="100">$100</div>
+        <div class="chip" style="background:#b18cf0" data-v="500">$500</div>
+      </div>
+      <div class="btnRow">
+        <button class="action coral" id="clearBetBtn">清除下注</button>
+        <button class="action gold" id="dealBtn">🂠 發牌</button>
+      </div>
+    </div>
+
+    <div class="btnRow hidden" id="actionButtons">
+      <button class="action" id="hitBtn">要牌 Hit</button>
+      <button class="action" id="standBtn">停牌 Stand</button>
+      <button class="action gold" id="doubleBtn">加倍 Double</button>
+      <button class="action gold" id="splitBtn">分牌 Split</button>
+    </div>
+
+    <div class="btnRow hidden" id="nextRoundRow">
+      <button class="action gold" id="nextRoundBtn">下一局</button>
+    </div>
+
+    <div class="overlay hidden" id="insuranceOverlay">
+      <h2>莊家明牌是 A</h2>
+      <p>要買保險嗎？保險金額為原下注的一半，如果莊家真的是 21 點，保險賠率 2:1。</p>
+      <div class="btnRow">
+        <button class="action gold" id="insuranceYesBtn">買保險</button>
+        <button class="action coral" id="insuranceNoBtn">不買</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="hint">籌碼會自動記住（存在這個瀏覽器裡），下次回來還在。籌碼歸零會自動補發 $1000。</div>
+</div>
+
+<div class="overlay hidden" id="nicknameOverlay" style="position:fixed; border-radius:0; z-index:1000;">
+  <h2>取一個暱稱</h2>
+  <p>排行榜上會用這個名字顯示你的最高籌碼紀錄（2~10 個字）</p>
+  <input id="nicknameInput" maxlength="10" placeholder="輸入暱稱"
+    style="padding:10px 14px; border-radius:10px; border:none; font-size:15px; text-align:center; width:200px;">
+  <div class="btnRow">
+    <button class="action gold" id="nicknameConfirmBtn">確定</button>
+  </div>
+</div>
+
+<div class="overlay hidden" id="leaderboardOverlay" style="position:fixed; border-radius:0; z-index:1000;">
+  <h2>🏆 全球排行榜</h2>
+  <div id="leaderboardList" style="width:100%; max-width:320px; max-height:50vh; overflow-y:auto; text-align:left;">
+    <p style="text-align:center; opacity:0.7;">載入中...</p>
+  </div>
+  <div class="btnRow">
+    <button class="action coral" id="leaderboardCloseBtn">關閉</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  const balanceVal = document.getElementById('balanceVal');
+  const betDisplayTop = document.getElementById('betDisplayTop');
+  const betDisplay = document.getElementById('betDisplay');
+  const dealerCardsEl = document.getElementById('dealerCards');
+  const dealerValueEl = document.getElementById('dealerValue');
+  const playerZoneEl = document.getElementById('playerZone');
+  const messageEl = document.getElementById('message');
+  const bettingArea = document.getElementById('bettingArea');
+  const actionButtons = document.getElementById('actionButtons');
+  const nextRoundRow = document.getElementById('nextRoundRow');
+  const insuranceOverlay = document.getElementById('insuranceOverlay');
+  const chips = document.getElementById('chips');
+  const clearBetBtn = document.getElementById('clearBetBtn');
+  const dealBtn = document.getElementById('dealBtn');
+  const hitBtn = document.getElementById('hitBtn');
+  const standBtn = document.getElementById('standBtn');
+  const doubleBtn = document.getElementById('doubleBtn');
+  const splitBtn = document.getElementById('splitBtn');
+  const nextRoundBtn = document.getElementById('nextRoundBtn');
+  const insuranceYesBtn = document.getElementById('insuranceYesBtn');
+  const insuranceNoBtn = document.getElementById('insuranceNoBtn');
+
+  const STARTING_BALANCE = 1000;
+  const BAL_KEY = 'blackjack_balance_v1';
+
+  function loadBalance(){
+    try{
+      const v = localStorage.getItem(BAL_KEY);
+      if(v===null) return STARTING_BALANCE;
+      const n = parseInt(v,10);
+      return isNaN(n) ? STARTING_BALANCE : n;
+    }catch(e){ return STARTING_BALANCE; }
+  }
+  function saveBalance(){
+    try{ localStorage.setItem(BAL_KEY, String(state.balance)); }catch(e){}
+    maybeSubmitScore();
+  }
+
+  // ---- Firebase / 排行榜 ----
+  const firebaseConfig = {
+    apiKey: "AIzaSyCEabGtUjyHHED_QALIgFhcosnVI4sV5zc",
+    authDomain: "blackjack-leaderboard-30bc7.firebaseapp.com",
+    projectId: "blackjack-leaderboard-30bc7",
+    storageBucket: "blackjack-leaderboard-30bc7.firebasestorage.app",
+    messagingSenderId: "85218205302",
+    appId: "1:85218205302:web:897b8c8b69d7146b3d0957",
+  };
+  let db = null;
+  try{
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+  }catch(e){
+    console.warn('Firebase 初始化失敗，排行榜功能將無法使用', e);
+  }
+
+  const NICK_KEY = 'blackjack_nickname_v1';
+  const HIGH_KEY = 'blackjack_highscore_v1';
+  let nickname = null;
+  try{ nickname = localStorage.getItem(NICK_KEY); }catch(e){}
+
+  const nicknameOverlay = document.getElementById('nicknameOverlay');
+  const nicknameInput = document.getElementById('nicknameInput');
+  const nicknameConfirmBtn = document.getElementById('nicknameConfirmBtn');
+  const nicknameNote = document.getElementById('nicknameNote');
+  const leaderboardBtn = document.getElementById('leaderboardBtn');
+  const leaderboardOverlay = document.getElementById('leaderboardOverlay');
+  const leaderboardList = document.getElementById('leaderboardList');
+  const leaderboardCloseBtn = document.getElementById('leaderboardCloseBtn');
+
+  function ensureNickname(){
+    if(nickname){
+      nicknameNote.textContent = '玩家：' + nickname;
+      return;
+    }
+    nicknameOverlay.classList.remove('hidden');
+  }
+  nicknameConfirmBtn.onclick = ()=>{
+    const v = nicknameInput.value.trim();
+    if(v.length<2){ nicknameInput.focus(); return; }
+    nickname = v.slice(0,10);
+    try{ localStorage.setItem(NICK_KEY, nickname); }catch(e){}
+    nicknameNote.textContent = '玩家：' + nickname;
+    nicknameOverlay.classList.add('hidden');
+    maybeSubmitScore();
+  };
+
+  function getHighScore(){
+    try{
+      const v = localStorage.getItem(HIGH_KEY);
+      return v===null ? 0 : parseInt(v,10);
+    }catch(e){ return 0; }
+  }
+  function setHighScore(v){
+    try{ localStorage.setItem(HIGH_KEY, String(v)); }catch(e){}
+  }
+
+  function maybeSubmitScore(){
+    if(!db || !nickname) return;
+    const high = getHighScore();
+    if(state.balance <= high) return;
+    setHighScore(state.balance);
+    db.collection('leaderboard').doc(nickname).set({
+      name: nickname,
+      balance: state.balance,
+      updatedAt: Date.now(),
+    }).catch(e=>{ console.warn('排行榜上傳失敗', e); });
+  }
+
+  function loadLeaderboard(){
+    leaderboardList.innerHTML = '<p style="text-align:center; opacity:0.7;">載入中...</p>';
+    if(!db){
+      leaderboardList.innerHTML = '<p style="text-align:center; opacity:0.7;">排行榜暫時無法使用</p>';
+      return;
+    }
+    db.collection('leaderboard').orderBy('balance','desc').limit(20).get()
+      .then(snap=>{
+        if(snap.empty){
+          leaderboardList.innerHTML = '<p style="text-align:center; opacity:0.7;">還沒有人上榜，當第一名吧！</p>';
+          return;
+        }
+        leaderboardList.innerHTML = '';
+        let rank = 1;
+        snap.forEach(doc=>{
+          const d = doc.data();
+          const row = document.createElement('div');
+          row.className = 'lbRow' + (d.name===nickname ? ' me' : '');
+          row.innerHTML = '<span class="lbRank">#'+rank+'</span><span class="lbName">'+escapeHtml(d.name)+'</span><span class="lbScore">'+fmt(d.balance)+'</span>';
+          leaderboardList.appendChild(row);
+          rank++;
+        });
+      })
+      .catch(e=>{
+        leaderboardList.innerHTML = '<p style="text-align:center; opacity:0.7;">讀取失敗，稍後再試</p>';
+        console.warn(e);
+      });
+  }
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  leaderboardBtn.onclick = ()=>{
+    leaderboardOverlay.classList.remove('hidden');
+    loadLeaderboard();
+  };
+  leaderboardCloseBtn.onclick = ()=>{
+    leaderboardOverlay.classList.add('hidden');
+  };
+
+  const RANKS = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+  const SUITS = ['♠','♥','♦','♣'];
+
+  function buildDeck(numDecks){
+    let deck = [];
+    for(let d=0; d<numDecks; d++){
+      for(const s of SUITS){
+        for(const r of RANKS){
+          deck.push({rank:r, suit:s});
+        }
+      }
+    }
+    return shuffle(deck);
+  }
+  function shuffle(arr){
+    const a = arr.slice();
+    for(let i=a.length-1;i>0;i--){
+      const j = Math.floor(Math.random()*(i+1));
+      [a[i],a[j]]=[a[j],a[i]];
+    }
+    return a;
+  }
+  function cardValue(rank){
+    if(rank==='A') return 11;
+    if(rank==='J'||rank==='Q'||rank==='K') return 10;
+    return parseInt(rank,10);
+  }
+  function handValue(cards){
+    let sum=0, aces=0;
+    for(const c of cards){
+      sum += cardValue(c.rank);
+      if(c.rank==='A') aces++;
+    }
+    while(sum>21 && aces>0){ sum-=10; aces--; }
+    return sum;
+  }
+  function isBlackjack(cards){
+    return cards.length===2 && handValue(cards)===21;
+  }
+  function isRed(suit){ return suit==='♥'||suit==='♦'; }
+
+  let state = {
+    phase: 'betting',
+    deck: [],
+    dealerHand: [],
+    dealerHidden: true,
+    playerHands: [],
+    activeHandIndex: 0,
+    currentBet: 0,
+    insuranceBet: 0,
+    balance: loadBalance(),
+  };
+
+  function newHand(bet, cards, opts){
+    return Object.assign({
+      cards: cards || [],
+      bet: bet || 0,
+      status: 'active',
+      isSplitAce: false,
+      fromSplit: false,
+      result: null,
+      payout: 0,
+    }, opts||{});
+  }
+
+  function fmt(n){ return '$'+n.toLocaleString(); }
+
+  function render(){
+    balanceVal.textContent = fmt(state.balance);
+    const totalBetShown = state.phase==='betting' ? state.currentBet :
+      state.playerHands.reduce((s,h)=>s+h.bet,0) + state.insuranceBet;
+    betDisplayTop.textContent = fmt(totalBetShown);
+    betDisplay.textContent = '下注金額：' + fmt(state.currentBet);
+
+    dealerCardsEl.innerHTML = '';
+    state.dealerHand.forEach((c,i)=>{
+      if(i===1 && state.dealerHidden){
+        dealerCardsEl.appendChild(makeCardEl(null, true));
+      } else {
+        dealerCardsEl.appendChild(makeCardEl(c, false));
+      }
+    });
+    if(state.dealerHand.length===0){
+      dealerValueEl.innerHTML = '&nbsp;';
+    } else if(state.dealerHidden){
+      dealerValueEl.textContent = '明牌：' + cardValue(state.dealerHand[0].rank);
+    } else {
+      dealerValueEl.textContent = '點數：' + handValue(state.dealerHand) + (isBlackjack(state.dealerHand)?' (Blackjack!)':'');
+    }
+
+    playerZoneEl.innerHTML = '';
+    state.playerHands.forEach((h, idx)=>{
+      const block = document.createElement('div');
+      block.className = 'handBlock' + (idx===state.activeHandIndex && state.phase==='playerTurn' ? ' active' : '');
+      const label = document.createElement('div');
+      label.className = 'zone-label';
+      label.textContent = '你的手牌' + (state.playerHands.length>1 ? ' #'+(idx+1) : '');
+      block.appendChild(label);
+
+      const row = document.createElement('div');
+      row.className = 'cardsRow';
+      h.cards.forEach(c=> row.appendChild(makeCardEl(c,false)));
+      block.appendChild(row);
+
+      const val = document.createElement('div');
+      val.className = 'handValue';
+      const v = handValue(h.cards);
+      val.textContent = '點數：' + v + (isBlackjack(h.cards) && !h.fromSplit ? ' (Blackjack!)' : (v>21?' 爆牌！':''));
+      block.appendChild(val);
+
+      const meta = document.createElement('div');
+      meta.className = 'handMeta';
+      meta.innerHTML = '<span>下注 ' + fmt(h.bet) + '</span>';
+      block.appendChild(meta);
+
+      if(h.result){
+        const rt = document.createElement('div');
+        rt.className = 'resultTag ' + (h.result==='win'||h.result==='blackjack' ? 'win' : h.result==='push' ? 'push' : 'lose');
+        const resultText = {
+          win:'贏了！ +'+fmt(h.payout - h.bet),
+          blackjack:'Blackjack！ +'+fmt(h.payout - h.bet),
+          push:'平手，退回下注',
+          lose:'輸了',
+        }[h.result];
+        rt.textContent = resultText;
+        block.appendChild(rt);
+      }
+
+      playerZoneEl.appendChild(block);
+    });
+
+    bettingArea.classList.toggle('hidden', state.phase!=='betting');
+    actionButtons.classList.toggle('hidden', state.phase!=='playerTurn');
+    nextRoundRow.classList.toggle('hidden', state.phase!=='resolved');
+    insuranceOverlay.classList.toggle('hidden', state.phase!=='insurance');
+
+    if(state.phase==='playerTurn'){
+      const h = state.playerHands[state.activeHandIndex];
+      const canDouble = h.cards.length===2 && !h.isSplitAce && state.balance>=h.bet;
+      const canSplit = h.cards.length===2 && h.cards[0].rank===h.cards[1].rank &&
+        state.playerHands.length<2 && state.balance>=h.bet;
+      doubleBtn.disabled = !canDouble;
+      splitBtn.disabled = !canSplit;
+    }
+
+    dealBtn.disabled = state.currentBet<=0 || state.currentBet>state.balance;
+  }
+
+  function makeCardEl(card, hidden){
+    const el = document.createElement('div');
+    if(hidden){
+      el.className = 'card back';
+      return el;
+    }
+    const red = isRed(card.suit);
+    el.className = 'card ' + (red?'red':'black');
+    el.innerHTML = '<div>'+card.rank+'</div><div class="suit">'+card.suit+'</div>';
+    return el;
+  }
+
+  chips.querySelectorAll('.chip').forEach(chip=>{
+    chip.addEventListener('click', ()=>{
+      if(state.phase!=='betting') return;
+      const v = parseInt(chip.dataset.v,10);
+      if(state.currentBet + v <= state.balance){
+        state.currentBet += v;
+      } else {
+        state.currentBet = state.balance;
+      }
+      render();
+    });
+  });
+  clearBetBtn.onclick = ()=>{
+    if(state.phase!=='betting') return;
+    state.currentBet = 0;
+    render();
+  };
+
+  function draw(){
+    if(state.deck.length < 20){
+      state.deck = buildDeck(4);
+    }
+    return state.deck.pop();
+  }
+
+  dealBtn.onclick = ()=>{
+    if(state.currentBet<=0 || state.currentBet>state.balance) return;
+    state.balance -= state.currentBet;
+    saveBalance();
+
+    if(state.deck.length<20) state.deck = buildDeck(4);
+    state.dealerHand = [];
+    state.dealerHidden = true;
+    state.playerHands = [ newHand(state.currentBet, []) ];
+    state.activeHandIndex = 0;
+    state.insuranceBet = 0;
+
+    state.playerHands[0].cards.push(draw());
+    state.dealerHand.push(draw());
+    state.playerHands[0].cards.push(draw());
+    state.dealerHand.push(draw());
+
+    messageEl.textContent = '';
+    const dealerUp = state.dealerHand[0];
+
+    if(dealerUp.rank==='A'){
+      state.phase = 'insurance';
+      render();
+      return;
+    }
+    proceedAfterInsuranceCheck();
+  };
+
+  insuranceYesBtn.onclick = ()=>{
+    const half = Math.floor(state.playerHands[0].bet/2);
+    const amt = Math.min(half, state.balance);
+    state.insuranceBet = amt;
+    state.balance -= amt;
+    saveBalance();
+    proceedAfterInsuranceCheck();
+  };
+  insuranceNoBtn.onclick = ()=>{
+    state.insuranceBet = 0;
+    proceedAfterInsuranceCheck();
+  };
+
+  function proceedAfterInsuranceCheck(){
+    const dealerUp = state.dealerHand[0];
+    const dealerHoleIsBJcandidate = dealerUp.rank==='A' || cardValue(dealerUp.rank)===10;
+
+    if(dealerHoleIsBJcandidate && isBlackjack(state.dealerHand)){
+      state.dealerHidden = false;
+      const ph = state.playerHands[0];
+      if(state.insuranceBet>0){
+        const insPayout = state.insuranceBet*3;
+        state.balance += insPayout;
+      }
+      if(isBlackjack(ph.cards)){
+        ph.result = 'push'; ph.payout = ph.bet;
+        state.balance += ph.bet;
+      } else {
+        ph.result = 'lose'; ph.payout = 0;
+      }
+      saveBalance();
+      state.phase = 'resolved';
+      messageEl.textContent = '莊家開出 Blackjack！' + (state.insuranceBet>0 ? '（保險有賠付）':'');
+      checkBankruptcy();
+      render();
+      return;
+    }
+
+    const ph = state.playerHands[0];
+    if(isBlackjack(ph.cards)){
+      ph.result = 'blackjack';
+      ph.payout = Math.floor(ph.bet*2.5);
+      state.balance += ph.payout;
+      saveBalance();
+      state.dealerHidden = false;
+      state.phase = 'resolved';
+      messageEl.textContent = '恭喜！你拿到 Blackjack！';
+      checkBankruptcy();
+      render();
+      return;
+    }
+
+    state.phase = 'playerTurn';
+    messageEl.textContent = '輪到你了，要牌或停牌？';
+    render();
+  }
+
+  hitBtn.onclick = ()=>{
+    const h = state.playerHands[state.activeHandIndex];
+    h.cards.push(draw());
+    const v = handValue(h.cards);
+    if(v>21){
+      h.status = 'bust';
+      advanceHand();
+    }
+    render();
+  };
+
+  standBtn.onclick = ()=>{
+    const h = state.playerHands[state.activeHandIndex];
+    h.status = 'stand';
+    advanceHand();
+    render();
+  };
+
+  doubleBtn.onclick = ()=>{
+    const h = state.playerHands[state.activeHandIndex];
+    if(h.cards.length!==2 || state.balance<h.bet) return;
+    state.balance -= h.bet;
+    saveBalance();
+    h.bet *= 2;
+    h.cards.push(draw());
+    const v = handValue(h.cards);
+    h.status = v>21 ? 'bust' : 'stand';
+    advanceHand();
+    render();
+  };
+
+  splitBtn.onclick = ()=>{
+    const h = state.playerHands[state.activeHandIndex];
+    if(h.cards.length!==2 || h.cards[0].rank!==h.cards[1].rank) return;
+    if(state.balance<h.bet) return;
+    state.balance -= h.bet;
+    saveBalance();
+
+    const card1 = h.cards[0];
+    const card2 = h.cards[1];
+    const isAceSplit = card1.rank==='A';
+
+    const hand1 = newHand(h.bet, [card1], {fromSplit:true, isSplitAce:isAceSplit});
+    const hand2 = newHand(h.bet, [card2], {fromSplit:true, isSplitAce:isAceSplit});
+    hand1.cards.push(draw());
+    hand2.cards.push(draw());
+
+    if(isAceSplit){
+      hand1.status='stand';
+      hand2.status='stand';
+    } else {
+      if(handValue(hand1.cards)>21) hand1.status='bust';
+      if(handValue(hand2.cards)>21) hand2.status='bust';
+    }
+
+    state.playerHands = [hand1, hand2];
+    state.activeHandIndex = 0;
+
+    if(state.playerHands[0].status!=='active'){
+      advanceHand();
+    }
+    render();
+  };
+
+  function advanceHand(){
+    let idx = state.activeHandIndex+1;
+    while(idx < state.playerHands.length && state.playerHands[idx].status!=='active'){
+      idx++;
+    }
+    if(idx < state.playerHands.length){
+      state.activeHandIndex = idx;
+    } else {
+      dealerTurn();
+    }
+  }
+
+  function dealerTurn(){
+    state.phase = 'dealerTurn';
+    state.dealerHidden = false;
+
+    const anyAlive = state.playerHands.some(h=>h.status!=='bust');
+    if(anyAlive){
+      while(handValue(state.dealerHand) < 17){
+        state.dealerHand.push(draw());
+      }
+    }
+    resolveRound();
+  }
+
+  function resolveRound(){
+    const dv = handValue(state.dealerHand);
+    const dealerBust = dv>21;
+
+    state.playerHands.forEach(h=>{
+      if(h.status==='bust'){
+        h.result='lose'; h.payout=0;
+        return;
+      }
+      const pv = handValue(h.cards);
+      if(isBlackjack(h.cards) && !h.fromSplit){
+        h.result='blackjack';
+        h.payout = Math.floor(h.bet*2.5);
+        state.balance += h.payout;
+      } else if(dealerBust || pv>dv){
+        h.result='win';
+        h.payout = h.bet*2;
+        state.balance += h.payout;
+      } else if(pv===dv){
+        h.result='push';
+        h.payout = h.bet;
+        state.balance += h.payout;
+      } else {
+        h.result='lose';
+        h.payout=0;
+      }
+    });
+    saveBalance();
+    state.phase='resolved';
+    messageEl.textContent = dealerBust ? '莊家爆牌！' : '莊家點數：'+dv;
+    checkBankruptcy();
+    render();
+  }
+
+  function checkBankruptcy(){
+    if(state.balance<=0){
+      state.balance = STARTING_BALANCE;
+      saveBalance();
+      messageEl.textContent += '　籌碼已用完，補發 '+fmt(STARTING_BALANCE)+'！';
+    }
+  }
+
+  nextRoundBtn.onclick = ()=>{
+    state.phase='betting';
+    state.currentBet = Math.min(state.currentBet, state.balance) || 0;
+    state.playerHands = [];
+    state.dealerHand = [];
+    state.insuranceBet = 0;
+    messageEl.textContent = '下注後點擊「發牌」開始';
+    render();
+  };
+
+  ensureNickname();
+  render();
+})();
+</script>
+</body>
+</html>
