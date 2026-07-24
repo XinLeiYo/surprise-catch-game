@@ -203,6 +203,9 @@
         <div class="chip" style="background:#ff6f61" data-v="50">$50</div>
         <div class="chip" style="background:#5b8def" data-v="100">$100</div>
         <div class="chip" style="background:#b18cf0" data-v="500">$500</div>
+        <div class="chip" style="background:#f4b942" data-v="1000">$1K</div>
+        <div class="chip" style="background:#ff9d5c" data-v="10000">$10K</div>
+        <div class="chip" id="allInChip" style="background:linear-gradient(135deg,#ff4d5e,#f4b942); color:#fff; font-size:12px;">歐印<br>ALL IN</div>
       </div>
       <div class="btnRow">
         <button class="action coral" id="clearBetBtn">清除下注</button>
@@ -581,6 +584,11 @@
     state.currentBet = 0;
     render();
   };
+  document.getElementById('allInChip').addEventListener('click', ()=>{
+    if(state.phase!=='betting') return;
+    state.currentBet = state.balance;
+    render();
+  });
 
   function draw(){
     if(state.deck.length < 20){
