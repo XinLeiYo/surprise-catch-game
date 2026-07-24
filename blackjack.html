@@ -234,17 +234,22 @@
     </div>
   </div>
 
-  <div id="hint">籌碼會自動記住（存在這個瀏覽器裡），下次回來還在。籌碼歸零會自動補發 $1000。</div>
+  <div id="hint">籌碼存在雲端，跨裝置都會同步。暱稱請記好，換裝置用同一個暱稱就能接續玩。</div>
 </div>
 
 <div class="overlay hidden" id="nicknameOverlay" style="position:fixed; border-radius:0; z-index:1000;">
   <h2>取一個暱稱</h2>
-  <p>排行榜上會用這個名字顯示你的最高籌碼紀錄（2~10 個字）</p>
+  <p>這個暱稱就是你雲端籌碼帳號的識別（2~10 個字），排行榜也會用這個名字顯示。換裝置玩時輸入同一個暱稱可以接續你的籌碼。</p>
   <input id="nicknameInput" maxlength="10" placeholder="輸入暱稱"
     style="padding:10px 14px; border-radius:10px; border:none; font-size:15px; text-align:center; width:200px;">
   <div class="btnRow">
     <button class="action gold" id="nicknameConfirmBtn">確定</button>
   </div>
+</div>
+
+<div class="overlay hidden" id="syncOverlay" style="position:fixed; border-radius:0; z-index:1000;">
+  <h2>☁️ 同步中</h2>
+  <p id="syncMsg">正在讀取你的雲端籌碼...</p>
 </div>
 
 <div class="overlay hidden" id="leaderboardOverlay" style="position:fixed; border-radius:0; z-index:1000;">
@@ -258,6 +263,7 @@
 </div>
 
 <script>
+
 (function(){
   const balanceVal = document.getElementById('balanceVal');
   const betDisplayTop = document.getElementById('betDisplayTop');
@@ -282,22 +288,9 @@
   const insuranceNoBtn = document.getElementById('insuranceNoBtn');
 
   const STARTING_BALANCE = 1000;
-  const BAL_KEY = 'blackjack_balance_v1';
+  const LOCAL_CACHE_KEY = 'blackjack_balance_cache_v1';
 
-  function loadBalance(){
-    try{
-      const v = localStorage.getItem(BAL_KEY);
-      if(v===null) return STARTING_BALANCE;
-      const n = parseInt(v,10);
-      return isNaN(n) ? STARTING_BALANCE : n;
-    }catch(e){ return STARTING_BALANCE; }
-  }
-  function saveBalance(){
-    try{ localStorage.setItem(BAL_KEY, String(state.balance)); }catch(e){}
-    maybeSubmitScore();
-  }
-
-  // ---- Firebase / 排行榜 ----
+  // ---- Firebase ----
   const firebaseConfig = {
     apiKey: "AIzaSyCEabGtUjyHHED_QALIgFhcosnVI4sV5zc",
     authDomain: "blackjack-leaderboard-30bc7.firebaseapp.com",
@@ -311,26 +304,40 @@
     firebase.initializeApp(firebaseConfig);
     db = firebase.firestore();
   }catch(e){
-    console.warn('Firebase 初始化失敗，排行榜功能將無法使用', e);
+    console.warn('Firebase 初始化失敗', e);
   }
 
   const NICK_KEY = 'blackjack_nickname_v1';
-  const HIGH_KEY = 'blackjack_highscore_v1';
   let nickname = null;
   try{ nickname = localStorage.getItem(NICK_KEY); }catch(e){}
+  let cloudReady = false;
+  let offlineMode = false;
 
   const nicknameOverlay = document.getElementById('nicknameOverlay');
   const nicknameInput = document.getElementById('nicknameInput');
   const nicknameConfirmBtn = document.getElementById('nicknameConfirmBtn');
   const nicknameNote = document.getElementById('nicknameNote');
+  const syncOverlay = document.getElementById('syncOverlay');
+  const syncMsg = document.getElementById('syncMsg');
   const leaderboardBtn = document.getElementById('leaderboardBtn');
   const leaderboardOverlay = document.getElementById('leaderboardOverlay');
   const leaderboardList = document.getElementById('leaderboardList');
   const leaderboardCloseBtn = document.getElementById('leaderboardCloseBtn');
 
+  function cacheBalanceLocally(bal){
+    try{ localStorage.setItem(LOCAL_CACHE_KEY+':'+nickname, String(bal)); }catch(e){}
+  }
+  function readCachedBalance(){
+    try{
+      const v = localStorage.getItem(LOCAL_CACHE_KEY+':'+nickname);
+      return v===null ? null : parseInt(v,10);
+    }catch(e){ return null; }
+  }
+
   function ensureNickname(){
     if(nickname){
       nicknameNote.textContent = '玩家：' + nickname;
+      loadPlayerFromCloud();
       return;
     }
     nicknameOverlay.classList.remove('hidden');
@@ -342,29 +349,54 @@
     try{ localStorage.setItem(NICK_KEY, nickname); }catch(e){}
     nicknameNote.textContent = '玩家：' + nickname;
     nicknameOverlay.classList.add('hidden');
-    maybeSubmitScore();
+    loadPlayerFromCloud();
   };
 
-  function getHighScore(){
-    try{
-      const v = localStorage.getItem(HIGH_KEY);
-      return v===null ? 0 : parseInt(v,10);
-    }catch(e){ return 0; }
-  }
-  function setHighScore(v){
-    try{ localStorage.setItem(HIGH_KEY, String(v)); }catch(e){}
+  function loadPlayerFromCloud(){
+    if(!db){
+      offlineMode = true;
+      state.balance = readCachedBalance() ?? STARTING_BALANCE;
+      cloudReady = true;
+      render();
+      return;
+    }
+    syncOverlay.classList.remove('hidden');
+    syncMsg.textContent = '正在讀取 ' + nickname + ' 的雲端籌碼...';
+    db.collection('players').doc(nickname).get()
+      .then(doc=>{
+        if(doc.exists){
+          state.balance = doc.data().balance;
+        } else {
+          state.balance = STARTING_BALANCE;
+          return db.collection('players').doc(nickname).set({
+            name: nickname, balance: STARTING_BALANCE, updatedAt: Date.now(),
+          });
+        }
+      })
+      .then(()=>{
+        cloudReady = true;
+        offlineMode = false;
+        cacheBalanceLocally(state.balance);
+        syncOverlay.classList.add('hidden');
+        render();
+      })
+      .catch(e=>{
+        console.warn('雲端讀取失敗，改用本機備份', e);
+        offlineMode = true;
+        state.balance = readCachedBalance() ?? STARTING_BALANCE;
+        cloudReady = true;
+        syncMsg.textContent = '連不上雲端，暫時使用離線備份資料';
+        setTimeout(()=> syncOverlay.classList.add('hidden'), 1400);
+        render();
+      });
   }
 
-  function maybeSubmitScore(){
-    if(!db || !nickname) return;
-    const high = getHighScore();
-    if(state.balance <= high) return;
-    setHighScore(state.balance);
-    db.collection('leaderboard').doc(nickname).set({
-      name: nickname,
-      balance: state.balance,
-      updatedAt: Date.now(),
-    }).catch(e=>{ console.warn('排行榜上傳失敗', e); });
+  function saveBalance(){
+    cacheBalanceLocally(state.balance);
+    if(!db || offlineMode) return;
+    db.collection('players').doc(nickname).set({
+      name: nickname, balance: state.balance, updatedAt: Date.now(),
+    }, {merge:true}).catch(e=>{ console.warn('雲端寫入失敗', e); });
   }
 
   function loadLeaderboard(){
@@ -373,7 +405,7 @@
       leaderboardList.innerHTML = '<p style="text-align:center; opacity:0.7;">排行榜暫時無法使用</p>';
       return;
     }
-    db.collection('leaderboard').orderBy('balance','desc').limit(20).get()
+    db.collection('players').orderBy('balance','desc').limit(20).get()
       .then(snap=>{
         if(snap.empty){
           leaderboardList.innerHTML = '<p style="text-align:center; opacity:0.7;">還沒有人上榜，當第一名吧！</p>';
@@ -457,7 +489,7 @@
     activeHandIndex: 0,
     currentBet: 0,
     insuranceBet: 0,
-    balance: loadBalance(),
+    balance: 0,
   };
 
   function newHand(bet, cards, opts){
@@ -552,7 +584,7 @@
       splitBtn.disabled = !canSplit;
     }
 
-    dealBtn.disabled = state.currentBet<=0 || state.currentBet>state.balance;
+    dealBtn.disabled = !cloudReady || state.currentBet<=0 || state.currentBet>state.balance;
   }
 
   function makeCardEl(card, hidden){
