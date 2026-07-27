@@ -335,12 +335,8 @@
   }
 
   function ensureNickname(){
-    if(nickname){
-      nicknameNote.textContent = '玩家：' + nickname;
-      loadPlayerFromCloud();
-      return;
-    }
     nicknameOverlay.classList.remove('hidden');
+    if(nickname){ nicknameInput.value = nickname; }
   }
   nicknameConfirmBtn.onclick = ()=>{
     const v = nicknameInput.value.trim();
